@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Flappy Navex - Navex Studios</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    body { user-select: none; -webkit-user-select: none; touch-action: none; background-color: #0f172a; }
+  </style>
+</head>
+<body class="h-screen w-screen flex flex-col justify-center items-center overflow-hidden font-sans bg-slate-950 text-white">
+
+  <!-- Contenedor Principal Estilo App -->
+  <div class="w-full max-w-md h-full max-h-[850px] flex flex-col justify-between p-4 bg-gradient-to-b from-sky-400 to-sky-600 shadow-2xl relative overflow-hidden rounded-3xl border-4 border-slate-800">
+    
+    <!-- Barra Superior / Puntaje -->
+    <div class="z-10 flex justify-between items-center bg-slate-900/60 backdrop-blur-md px-5 py-3 rounded-2xl border border-white/20 shadow-lg">
+      <div class="flex items-center gap-2">
+        <span class="text-xl">🐦</span>
+        <span class="text-xs font-black tracking-wider text-sky-200">FLAPPY NAVEX</span>
+      </div>
+      <div class="flex items-center gap-4">
+        <div class="text-amber-300 font-black text-lg">Puntos: <span id="score">0</span></div>
+      </div>
+    </div>
+
+    <!-- Lienzo (Canvas) del Juego -->
+    <div id="game-stage" class="absolute inset-0 flex items-center justify-center cursor-pointer">
+      <canvas id="bird-canvas" class="w-full h-full"></canvas>
+      
+      <!-- Pantalla de Inicio / Game Over Overlay -->
+      <div id="menu-overlay" class="absolute inset-0 bg-slate-950/70 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center z-20">
+        <div class="w-20 h-20 bg-amber-400 rounded-full flex items-center justify-center text-4xl shadow-xl mb-4 animate-bounce">
+          🐦
+        </div>
+        <h1 id="menu-title" class="text-3xl font-black text-white mb-2 drop-shadow-md">Flappy Navex</h1>
+        <p id="menu-subtitle" class="text-sm text-sky-200 mb-6">Toca la pantalla o haz clic para volar y esquivar los tubos</p>
+        
+        <button onclick="startGame()" class="bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 font-black px-8 py-4 rounded-2xl shadow-xl text-lg hover:scale-105 active:scale-95 transition-transform flex items-center gap-2">
+          <i class="fa-solid fa-play"></i> ¡Jugar Ahora!
+        </button>
+        
+        <div class="mt-6 text-xs text-slate-400 font-bold">
+          Récord Máximo: <span id="high-score" class="text-amber-400 text-sm">0</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Pie de página decorativo -->
+    <div class="z-10 text-center pb-2">
+      <span class="text-[10px] font-bold text-sky-100/70 tracking-widest uppercase">Navex Studios © 2026</span>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('bird-canvas');
+    const ctx = canvas.getContext('2d');
+    
+    // Ajustar resolución del Canvas
+    canvas.width = canvas.parentElement.clientWidth;
+    canvas.height = canvas.parentElement.clientHeight;
+
+    let gameState = 'START'; // START, PLAYING, GAMEOVER
+    let score = 0;
+    let highScore = localStorage.getItem('flappy_navex_high') || 0;
+    document.getElementById('high-score').innerText = highScore;
+
+    // Objeto Pájaro
+    let bird = {
+      x: 60,
+      y: canvas.height / 2,
+      radius: 18,
+      gravity: 0.25,
+      lift: -6.5,
+      velocity: 0
+    };
+
+    // Tuberías
+    let pipes = [];
+    let pipeWidth = 60;
+    let pipeGap = 160;
+    let frameCount = 0;
+
+    function startGame() {
+      gameState = 'PLAYING';
+      document.getElementById('menu-overlay').classList.add('hidden');
+      score = 0;
+      document.getElementById('score').innerText = score;
+      bird.y = canvas.height / 2;
+      bird.velocity = 0;
+      pipes = [];
+      frameCount = 0;
+    }
+
+    function jump() {
+      if (gameState === 'PLAYING') {
+        bird.velocity = bird.lift;
+      } else if (gameState === 'GAMEOVER') {
+        startGame();
+      }
+    }
+
+    // Controles por toque o clic
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'Space') jump();
+    });
+    canvas.addEventListener('click', jump);
+    canvas.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      jump();
+    });
+
+    function update() {
+      if (gameState !== 'PLAYING') return;
+
+      // Gravedad del pájaro
+      bird.velocity += bird.gravity;
+      bird.y += bird.velocity;
+
+      // Colisión con el suelo o techo
+      if (bird.y + bird.radius >= canvas.height - 40 || bird.y - bird.radius <= 0) {
+        gameOver();
+      }
+
+      // Generar tuberías
+      if (frameCount % 100 === 0) {
+        let minHeight = 60;
+        let maxHeight = canvas.height - 220;
+        let topHeight = Math.floor(Math.random() * (maxHeight - minHeight + 1)) + minHeight;
+        
+        pipes.push({
+          x: canvas.width,
+          top: topHeight,
+          bottom: canvas.height - topHeight - pipeGap,
+          passed: false
+        });
+      }
+
+      // Mover y verificar tuberías
+      for (let i = pipes.length - 1; i >= 0; i--) {
+        pipes[i].x -= 3;
+
+        // Comprobar colisión
+        if (
+          bird.x + bird.radius > pipes[i].x &&
+          bird.x - bird.radius < pipes[i].x + pipeWidth &&
+          (bird.y - bird.radius < pipes[i].top || bird.y + bird.radius > canvas.height - pipes[i].bottom)
+        ) {
+          gameOver();
+        }
+
+        // Sumar puntos al pasar el tubo
+        if (!pipes[i].passed && pipes[i].x + pipeWidth < bird.x) {
+          score++;
+          document.getElementById('score').innerText = score;
+          pipes[i].passed = true;
+        }
+
+        // Eliminar tubos fuera de pantalla
+        if (pipes[i].x + pipeWidth < 0) {
+          pipes.splice(i, 1);
+        }
+      }
+
+      frameCount++;
+    }
+
+    function gameOver() {
+      gameState = 'GAMEOVER';
+      if (score > highScore) {
+        highScore = score;
+        localStorage.setItem('flappy_navex_high', highScore);
+        document.getElementById('high-score').innerText = highScore;
+      }
+
+      // Mostrar menú de Game Over
+      document.getElementById('menu-title').innerText = '¡Juego Terminado!';
+      document.getElementById('menu-subtitle').innerText = `Hiciste ${score} puntos. ¿Te vuelves a aventar?`;
+      document.getElementById('menu-overlay').classList.remove('hidden');
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Dibujar Tubos
+      pipes.forEach(pipe => {
+        ctx.fillStyle = '#22c55e'; // Verde brillante
+        // Tubo Superior
+        ctx.fillRect(pipe.x, 0, pipeWidth, pipe.top);
+        ctx.strokeStyle = '#15803d';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(pipe.x, 0, pipeWidth, pipe.top);
+
+        // Tubo Inferior
+        ctx.fillRect(pipe.x, canvas.height - pipe.bottom, pipeWidth, pipe.bottom);
+        ctx.strokeRect(pipe.x, canvas.height - pipe.bottom, pipeWidth, pipe.bottom);
+      });
+
+      // Dibujar Suelo decorativo
+      ctx.fillStyle = '#1e293b';
+      ctx.fillRect(0, canvas.height - 40, canvas.width, 40);
+      ctx.fillStyle = '#4ade80';
+      ctx.fillRect(0, canvas.height - 40, canvas.width, 8);
+
+      // Dibujar Pájaro (Navex Bird)
+      ctx.save();
+      ctx.translate(bird.x, bird.y);
+      
+      // Cuerpo del Pájaro
+      ctx.fillStyle = '#facc15';
+      ctx.beginPath();
+      ctx.arc(0, 0, bird.radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = '#ca8a04';
+      ctx.stroke();
+
+      // Ojo
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(6, -6, 6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#0f172a';
+      ctx.beginPath();
+      ctx.arc(8, -6, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Pico
+      ctx.fillStyle = '#f97316';
+      ctx.beginPath();
+      ctx.moveTo(12, -2);
+      ctx.lineTo(22, 2);
+      ctx.lineTo(12, 6);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.restore();
+    }
+
+    // Bucle principal del juego
+    function loop() {
+      update();
+      draw();
+      requestAnimationFrame(loop);
+    }
+
+    loop();
+  </script>
+</body>
+</html>
